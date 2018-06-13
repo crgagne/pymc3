@@ -90,6 +90,7 @@ class CpuLeapfrogIntegrator(object):
         # q_new = q + epsilon * v_new
         axpy(v_new, q_new, a=epsilon)
 
+        import pdb; pdb.set_trace()
         logp = self._logp_dlogp_func(q_new, q_new_grad)
 
         # p_new = p_new + dt * q_new_grad
