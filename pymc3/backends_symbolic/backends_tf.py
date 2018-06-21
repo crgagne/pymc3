@@ -7,6 +7,8 @@ import inspect
 
 from .common import floatx, has_arg, makeiter
 
+from tensorflow import gradients as grad
+
 _SESSION = None
 
 ### Variables and Variable Manipulation ###
@@ -230,8 +232,6 @@ def sqrt(x):
 def log(x):
    return(tf.log(x))
 
-def grad(x):
-    return(tf.gradients(loss, variables, colocate_gradients_with_ops=True))
 
 def bound(logp, condition):
   """

@@ -8,6 +8,11 @@ from .common import floatx, has_arg, makeiter
 theano.config.floatX = floatx()
 from theano.tensor.var import TensorVariable as TV
 
+# not sure if these will have equivalent's in Tensorflow
+from theano import shared, clone
+from theano.tensor import vector
+from theano.tensor import grad
+
 ### Variables and Variable Manipulation ###
 
 class TensorVariable(TV):
@@ -130,8 +135,10 @@ class Function(object):
         self.name = name
 
     def __call__(self, inputs):
-        return self.function(**inputs)
-
+        if type(inputs)==dict:
+            return self.function(**inputs) # other methods use dict for point in parameter space
+        else:
+            return self.function(inputs) # ValueGradFunction uses an array
 
 def function(inputs, outputs, updates=[], **kwargs):
     """Instantiates a Function class. Also checks validity of arguments. """
@@ -159,8 +166,6 @@ def sqrt(x):
 def log(x):
    return(tt.log(x))
 
-def grad(x):
-    return(tt.grad(x))
 
 def alltrue_scalar(vals):
     return tt.all([tt.all(1 * val) for val in vals])
