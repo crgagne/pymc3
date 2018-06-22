@@ -192,7 +192,7 @@ class Metropolis(ArrayStepShared):
             ## This now takes in all variables in the model
             ## and decides which to update based on the function object, which
             ## had the order in it.
-            varname_to_update = str(self.vars[0]) # decide which variable to update
+            varname_to_update = str(self.vars[0].name) # decide which variable to update
             q[varname_to_update]=q0[varname_to_update]+delta
 
             # q,q0 are dictionaries here with old and proposed values for the variable being updated

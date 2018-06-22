@@ -196,7 +196,6 @@ class Factor(object):
     associated with them.
     """
     def __init__(self, *args, **kwargs):
-        #import pdb; pdb.set_trace()
         super(Factor, self).__init__(*args, **kwargs)
 
     @property
@@ -410,7 +409,7 @@ class ValueGradFunction(object):
         if len(set(names)) != len(names):
             raise ValueError('Names of the arguments are not unique.')
 
-        if S.backend=='theano':
+        if S.backend()=='theano':
             if cost.ndim > 0:
                 raise ValueError('Cost must be a scalar.')
 
@@ -425,7 +424,7 @@ class ValueGradFunction(object):
             dtype = S.floatx()
         self.dtype = dtype
 
-        if S.backend=='theano':
+        if S.backend()=='theano':
             for var in self._grad_vars:
                 if not np.can_cast(var.dtype, self.dtype, casting):
                     raise TypeError('Invalid dtype for variable %s. Can not '
@@ -436,36 +435,35 @@ class ValueGradFunction(object):
                                     'floating point but is %s.'
                                     % (var.name, var.dtype))
 
-        givens = []
-        self._extra_vars_shared = {}
-        if len(extra_vars)>0 and S.backend()=='tensorflow':
-            raise NotImplementedError
+            givens = []
+            self._extra_vars_shared = {}
+            if len(extra_vars)>0:
+                for var in extra_vars:
+                   shared = S.shared(var.tag.test_value, var.name + '_shared__')
+                   self._extra_vars_shared[var.name] = shared
+                   givens.append((var, shared))
 
-            for var in extra_vars:
-               shared = S.shared(var.tag.test_value, var.name + '_shared__')
-               self._extra_vars_shared[var.name] = shared
-               givens.append((var, shared))
-
-        if S.backend()=='theano':
-            ## # QUESTION: why join the variables like this? So the grad can return a np.array most likely
             self._vars_joined, self._cost_joined = self._build_joined(
                 self._cost, grad_vars, self._ordering.vmap)
-
 
             grad = S.grad(self._cost_joined, self._vars_joined)
             grad.name = '__grad'
 
             inputs = [self._vars_joined]
 
-            self._theano_function = S.function(inputs, [self._cost_joined, grad], givens=givens, **kwargs)
-        elif S.backend()=='tensorflow':
-            # do I need to make a copy though?
-            grad = S.grad(self._cost, grad_vars,stop_gradients=grad_vars)
-            # I think we want stop gradients
-            # see https://www.tensorflow.org/api_docs/python/tf/gradients
-            import pdb; pdb.set_trace()
-            self._theano_function = S.function(grad_vars, [self._cost, grad], givens=givens, **kwargs)
+            self._theano_function = S.function(
+                inputs,[self._cost_joined, grad], givens=givens, **kwargs)
 
+        elif S.backend()=='tensorflow':
+            # multiple dimensions may break this
+            # how does vmap deal with matrices
+            # see notes on how can't reshape the input variables and copy graph
+            givens = []
+            grad = S.grad(self._cost, grad_vars,stop_gradients=grad_vars) # I think we want stop gradients, see https://www.tensorflow.org/api_docs/python/tf/gradients
+            grad = [S.tf.reshape(g,(1,)) if g.shape==[] else g for g in grad] # reshape scalar inputs into vector
+            grad = S.tf.concat(grad,axis=0) # concatenate all inputs into vector.
+            self._theano_function = S.function(grad_vars,
+                [self._cost, grad], givens=givens, **kwargs)
 
     def set_extra_values(self, extra_vars):
         self._extra_are_set = True
@@ -495,6 +493,14 @@ class ValueGradFunction(object):
             out = np.empty_like(array)
         else:
             out = grad_out
+
+
+        if S.backend()=='tensorflow':
+            # restructure input into dict from array for tensorflow
+            feed_dict = {}
+            for vmap in self._ordering.vmap:
+                feed_dict[vmap.var]=array[vmap.slc].reshape(vmap.shp)
+            array=feed_dict
 
         logp, dlogp = self._theano_function(array)
         if grad_out is None:
@@ -538,6 +544,7 @@ class ValueGradFunction(object):
         return point
 
     def _build_joined(self, cost, args, vmap):
+
         args_joined = S.vector('__args_joined')
         args_joined.tag.test_value = np.zeros(self.size, dtype=self.dtype)
 
@@ -549,6 +556,7 @@ class ValueGradFunction(object):
 
         replace = {var: joined_slices[var.name] for var in args}
         return args_joined, S.clone(cost, replace=replace)
+
 
 class Model(six.with_metaclass(InitContextMeta, Context, Factor, WithMemoization)):
     """Encapsulates the variables and likelihood factors of a model.
@@ -1138,7 +1146,7 @@ def Point(*args, **kwargs):
         raise TypeError(
             "can't turn {} and {} into a dict. {}".format(args, kwargs, e))
     return dict((str(k), np.array(v)) for k, v in d.items()
-                if str(k) in map(str, model.vars))
+                    if str(k) in map(str, model.vars))
 
 
 class FastPointFunc(object):

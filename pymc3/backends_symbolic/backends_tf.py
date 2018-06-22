@@ -4,10 +4,13 @@ from tensorflow import Variable, Tensor
 import os
 import sys
 import inspect
+import warnings
+
 
 from .common import floatx, has_arg, makeiter
 
 from tensorflow import gradients as grad
+
 
 _SESSION = None
 
@@ -17,6 +20,9 @@ class TensorVariable(Variable):
     """Main Class for FreeRV and ObservedRV
        It's a Variable in TensorFlow
     """
+    def __str__(self):
+        return self.name # so it stops being called <tf... >
+
     def getName(self):
         return None
 
@@ -185,20 +191,27 @@ class Function(object):
         self.session_kwargs = session_kwargs
 
     def __call__(self, inputs):
-        if isinstance(inputs, (list, tuple)):
+        if isinstance(inputs, (list, tuple,np.ndarray)):
+            warnings.warn('Inputs must be in the same order as when computation graph \
+            (cost function) was defined. Using dictionary can take any order of variables.')
             feed_dict = self.feed_dict.copy()
             for tensor, value in zip(self.inputs, inputs):
                 feed_dict[tensor] = value
+
         elif isinstance(inputs,(dict)):
             feed_dict = self.feed_dict.copy()
             # This maps inputs to those in self.inputs.
             # The inputs come in in the order of the variables, but self.inputs
             # is ordered based on which variable is main input (ie. which distribution)
             for tensor in self.inputs:
-                feed_dict[tensor] = inputs[str(tensor)]
-        else:
-            print('error: input needs to be dict,list,or tuple')
+                #feed_dict[tensor] = inputs[str(tensor)]
+                #if isinstance([k for k in inputs.keys()][0],str): # feed dict are strings
+                feed_dict[tensor.name]=inputs[tensor.name]
+                #else: # feed dict keys are tensorflow variables.
+                #    feed_dict[tensor] = inputs[str(tensor)]
 
+        else:
+            raise TypeError("input needs to be dict,list,or tuple")
         fetches = self.outputs + [self.updates_op] + self.fetches
         session = get_session()
         updated = session.run(fetches=fetches, feed_dict=feed_dict)
